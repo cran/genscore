@@ -138,7 +138,7 @@ cov_cons <- function(mode, p, seed=NULL, spars=1, eig=0.1, subgraphs=1){
 #'        burn.in.samples = 100, thinning = 10)
 #' est <- estimate(x, setting="gaussian", elts=NULL, domain=domain, centered=TRUE,
 #'          symmetric="symmetric", lambda_length=100, mode="min_pow",
-#'          param1=1, param2=3, diagonal_multiplier=dm,)
+#'          param1=1, param2=3, diagonal_multiplier=dm, verbose=FALSE)
 #' # Apply tp_fp to each estimated edges set for each lambda
 #' TP_FP <- t(sapply(est$edgess, function(edges){tp_fp(edges, true_edges, p)}))
 #' old.par <- par(mfrow=c(1,1), mar=c(5,5,5,5))
@@ -427,8 +427,8 @@ compare_two_results <- function(res, res2){
 #' Currently only R, R+, simplex, uniform and polynomial-type domains of the form sum(x^2) <= d or sum(x^2) >= d or sum(abs(x)) <= d are implemented.
 #' @return A function that takes \code{x} and returns a list of a vector \code{g0} and a matrix \code{g0d}.
 #' @examples
-#' n <- 30
-#' p <- 10
+#' n <- 15
+#' p <- 5
 #' K <- diag(p)
 #' eta <- numeric(p)
 #'
@@ -596,8 +596,8 @@ get_g0 <- function(domain, C) {
 #' Currently only R, R+, simplex, uniform and polynomial-type domains of the form sum(x^2) <= d or sum(x^2) >= d or sum(abs(x)) <= d are implemented.
 #' @return A function that takes \code{x} and returns a list of a vector \code{g0} and a matrix \code{g0d}.
 #' @examples
-#' n <- 30
-#' p <- 10
+#' n <- 15
+#' p <- 5
 #' K <- diag(p)
 #' eta <- numeric(p)
 #'

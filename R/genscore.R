@@ -1,11 +1,18 @@
-#dyn.load("src/genscore.so")
-
 ## Package:
 #library(knitr); library(rmarkdown); library(devtools); library(roxygen2)
-#tools::package_native_routine_registration_skeleton(".") // Manually add dist, rab_arms
-#document(); build(); install(); check()
-#knitr::knit("vignettes/gen_vignette.Rmd.orig", output="vignettes/gen_vignette.Rmd")
-#check_win_devel(); check_win_release(); check_rhub()
+#tools::package_native_routine_registration_skeleton(".") // Copy as src/genscore_init.c and manually add dist, rab_arms
+#document(); build(); install(); devtools::check()
+#source("vignettes/precompile.R")
+#check_win_devel(); check_win_release(); #check_rhub()
+#rhub::check_on_macos(); 
+#rhub::check(platform="linux-x86_64-rocker-gcc-san")
+#rhub::check(platform="debian-clang-devel")
+#rhub::check(platform="debian-gcc-devel")
+#rhub::check(platform="debian-gcc-release")
+#rhub::check(platform="fedora-clang-devel")
+#rhub::check(platform="fedora-gcc-devel")
+#rhub::check(platform="ubuntu-gcc-devel")
+#rhub::check(platform="ubuntu-gcc-release")
 
 
 #' Finds the distance of each element in a matrix x to the its boundary of the domain while fixing the others in the same row (dist(x, domain)), and calculates element-wise h(dist(x, domain)) and h\'(dist(x, domain)) (w.r.t. each element in x).
@@ -15,9 +22,14 @@
 #' @param h_hp A function, the \eqn{h} and \eqn{hp} (the derivative of \code{h}) functions. \code{h_hp(x)} should return a list of elements \code{hx} (\code{h(x)}) and \code{hpx} (\code{hp(x)}), both of which have the same size as \code{x}.
 #' @param x An \code{n} by \code{p} matrix, the data matrix, where \code{n} is the sample size and \code{p} the dimension.
 #' @param domain A list returned from \code{make_domain()} that represents the domain.
-#' @return A list that contains \code{h(dist(x, domain))} and \code{h\'(dist(x, domain))}.
+#' @param log A logical, defaults to \code{FALSE}. If \code{TRUE}, assumes that \code{h_hp} contains in fact the log of \code{h} and \code{hp}, and this function will return the log of \code{h(dist(x, domain))} and \code{abs(h\'(dist(x, domain)))} along with the sign of \code{h\'(dist(x, domain))}.
+#' @return If \code{log == FALSE}, a list that contains \code{h(dist(x, domain))} and \code{h\'(dist(x, domain))}.
 #'   \item{hdx}{\code{h(dist(x, domain))}.}
 #'   \item{hpdx}{\code{hp(dist(x, domain))}.}
+#' If \code{log == TRUE}, a list that contains the log of \code{h(dist(x, domain))} and \code{abs(h\'(dist(x, domain)))} as well as the sign of \code{h\'(dist(x, domain))}.
+#'   \item{log_hdx}{\code{log(h(dist(x, domain)))}.}
+#'   \item{log_hpdx}{\code{log(abs(hp(dist(x, domain))))}.}
+#'   \item{sign_hpdx}{\code{sign(hp(dist(x, domain)))}.}
 #' @details
 #' Define \code{dist(x, domain)} as the matrix whose \code{i,j}-th component is the distance of \eqn{x_{i,j}} to the boundary of \code{domain}, assuming \eqn{x_{i,-j}} are fixed. The matrix has the same size of \code{x} (\code{n} by \code{p}), or if \code{domain$type == "simplex"} and \code{x} has full dimension \code{p}, it has \code{p-1} columns.\cr
 #' Define \code{dist\'(x, domain)} as the component-wise derivative of \code{dist(x, domain)} in its components. That is, its \code{i,j}-th component is 0 if \eqn{x_{i,j}} is unbounded or is bounded from both below and above or is at the boundary, or -1 if \eqn{x_{i,j}} is closer to its lower boundary (or if its bounded from below but unbounded from above), or 1 otherwise.\cr
@@ -35,7 +47,7 @@
 #' # Equivalently:
 #' \donttest{
 #' x2 <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, burn_in=1000, thinning=100)
+#'        finite_infinity=100, xinit=NULL, burn_in=1000, thinning=100, verbose=FALSE)
 #' }
 #' h_hp <- get_h_hp("pow", 2) # For demonstration only
 #' hd <- h_of_dist(h_hp, x, domain)
@@ -45,8 +57,8 @@
 #'
 #' # exp on R_+^p:
 #' domain <- make_domain("R+", p=p)
-#' x <- gen(n, setting="exp", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="exp", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("pow", 2) # For demonstration only
 #' hd <- h_of_dist(h_hp, x, domain)
 #' # hdx is x^2 and hpdx is 2*x; with domain R+, the distance of x to the boundary is just x itself
@@ -56,8 +68,8 @@
 #' # Gaussian on sum(x^2) > p with x allowed to be negative
 #' domain <- make_domain("polynomial", p=p,
 #'        ineqs=list(list("expression"=paste("sum(x^2)>", p), abs=FALSE, nonnegative=FALSE)))
-#' x <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' dist <- get_dist(x, domain)
 #' quota <- p - (rowSums(x^2) - x^2) # How much should xij^2 at least be so that sum(xi^2) > p?
 #' # How far is xij from +/-sqrt(quota), if quota >= 0?
@@ -85,7 +97,7 @@
 #' # gamma on ([0, 1] v [2,3])^p
 #' domain <- make_domain("uniform", p=p, lefts=c(0,2), rights=c(1,3))
 #' x <- gen(n, setting="gamma", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' dist <- get_dist(x, domain)
 #' # If 0 <= xij <= 1, distance to boundary is min(x-0, 1-x)
 #' max(abs(dist$dx - pmin(x, 1-x))[x >= 0 & x <= 1])
@@ -113,8 +125,8 @@
 #'                       list("expression"="exp(x)>1.3", abs=FALSE, nonnegative=FALSE)))
 #' set.seed(1)
 #' xinit <- c(1.5, 0.5, abs(stats::rnorm(p-2)) + log(1.3))
-#' x <- gen(n, setting="ab_3/5_7/10", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=xinit, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="ab_3/5_7/10", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=xinit, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' dist <- get_dist(x, domain)
 #' # x_{i1} has uniform bound [1, +Inf), so its distance to its boundary is x_{i1} - 1
 #' max(abs(dist$dx[,1] - (x[,1] - 1)))
@@ -143,8 +155,8 @@
 #'        ineqs=list(list("expression"=paste(paste(sapply(1:p,
 #'                            function(j){paste(j, "x", j, sep="")}), collapse="+"), "<1"),
 #'                      abs=FALSE, nonnegative=TRUE)))
-#' x <- gen(n, setting="log_log", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="log_log", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' dist <- get_dist(x, domain)
 #' # Upper bound for j * xij so that sum_j j * xij <= 1
 #' quota <- 1 - (rowSums(t(t(x) * 1:p)) - t(t(x) * 1:p))
@@ -165,7 +177,7 @@
 #' diag(K) <- diag(K) - rowSums(K) # So that rowSums(K) == colSums(K) == 0
 #' eigen(K)$val[(p-1):p] # Make sure K has one 0 and p-1 positive eigenvalues
 #' x <- gen(n, setting="log_log_sum0", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=TRUE)
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' # Note that dist$dx and dist$dpx only has p-1 columns -- excluding the last coordinate in x
 #' dist <- get_dist(x, domain)
 #' # Upper bound for x_{i,j} so that x_{i,1} + ... + x_{i,p-1} <= 1
@@ -180,17 +192,21 @@
 #' # hpdx = 2 * dist' * dist
 #' print(max(abs(hd$hpdx - 2*dist$dpx*dist$dx)))
 #' @export
-h_of_dist <- function(h_hp, x, domain) {
+h_of_dist <- function(h_hp, x, domain, log=FALSE) {
   dists <- get_dist(x, domain)
   dx <- dists$dx # Distance to boundary
   dpx <- dists$dpx # Derivative of distance to boundary, 1 if closer to left boundary, -1 if right, 0 if equal or at boundary of domain is entire R
   h_hp_dx <- h_hp(dx) # h(dist to boundary) and h'(dist to boundary)
   hdx <- h_hp_dx$hx # h(dist to boundary)
-
   hpdx <- h_hp_dx$hpx # h'(dist to boundary(x)) = h'(dist to boundary) * dist'(x)
-  hpdx[dpx == 0] <- 0 # Instead of doing h_hp_dx$hpx * dpx, this would avoid Inf * 0 = NaN
-  hpdx[dpx == -1] <- -hpdx[dpx == -1]
-  return (list("hdx"=hdx, "hpdx"=hpdx))
+  if (log) {
+    hpdx[dpx == 0] <- -Inf
+    return (list("log_hdx"=hdx, "log_hpdx"=hpdx, "sign_hpdx"=1 - 2*(dpx == -1)))
+  } else {
+    hpdx[dpx == 0] <- 0 # Instead of doing h_hp_dx$hpx * dpx, this would avoid Inf * 0 = NaN
+    hpdx[dpx == -1] <- -hpdx[dpx == -1]
+    return (list("hdx"=hdx, "hpdx"=hpdx))
+  }
 }
 
 #' Parses an ab setting into rational numbers a and b.
@@ -245,7 +261,7 @@ parse_ab <- function(s) {
 #' @param b A number, must be >= 0.
 #' @param setting A string that indicates the distribution type. Returned without being checked or used in the function body.
 #' @param centered A boolean, whether in the centered setting (assume \eqn{\boldsymbol{\mu}=\boldsymbol{\eta}=0}{\mu=\eta=0}) or not. Default to \code{TRUE}.
-#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if noncentered. Parameter ignored if \code{centered=TRUE}. Default to \code{TRUE}.
+#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if non-centered. Parameter ignored if \code{centered=TRUE}. Default to \code{TRUE}.
 #' @param scale A string indicating the scaling method. Returned without being checked or used in the function body. Default to \code{"norm"}.
 #' @param diagonal_multiplier A number >= 1, the diagonal multiplier.
 #' @return A list that contains the elements necessary for estimation.
@@ -286,15 +302,15 @@ parse_ab <- function(s) {
 #' eta <- rep(0, p)
 #' K <- diag(p)
 #' domain <- make_domain("R+", p=p)
-#' x <- gen(n, setting="ab_1/2_7/10", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="ab_1/2_7/10", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 1.5, 3)
 #' h_hp_dx <- h_of_dist(h_hp, x, domain) # h and h' applied to distance from x to boundary
-#' get_elts_ab(h_hp_dx$hdx, h_hp_dx$hpdx, x, a=0.5, b=0.7, setting="ab_1/2_7/10",
+#' elts <- get_elts_ab(h_hp_dx$hdx, h_hp_dx$hpdx, x, a=0.5, b=0.7, setting="ab_1/2_7/10",
 #'             centered=TRUE, scale="norm", diag=1.5)
-#' get_elts_ab(h_hp_dx$hdx, h_hp_dx$hpdx, x, a=0.5, b=0.7, setting="ab_1/2_7/10",
+#' elts <- get_elts_ab(h_hp_dx$hdx, h_hp_dx$hpdx, x, a=0.5, b=0.7, setting="ab_1/2_7/10",
 #'             centered=FALSE, profiled_if_noncenter=TRUE, scale="norm", diag=1.7)
-#' get_elts_ab(h_hp_dx$hdx, h_hp_dx$hpdx, x, a=0.5, b=0.7, setting="ab_1/2_7/10",
+#' elts <- get_elts_ab(h_hp_dx$hdx, h_hp_dx$hpdx, x, a=0.5, b=0.7, setting="ab_1/2_7/10",
 #'             centered=FALSE, profiled_if_noncenter=FALSE, scale="norm", diag=1.9)
 #' @export
 get_elts_ab <- function(hdx, hpdx, x, a, b, setting,
@@ -341,7 +357,7 @@ get_elts_ab <- function(hdx, hpdx, x, a, b, setting,
 #' @param hpdx A matrix, \eqn{h'(\mathbf{x})}{h\'(x)} applied to the distance of x from the boundary of the domain, should be of the same dimension as \code{x}.
 #' @param x An \code{n} by \code{p} matrix, the data matrix, where \code{n} is the sample size and \code{p} the dimension.
 #' @param centered A boolean, whether in the centered setting (assume \eqn{\boldsymbol{\mu}=\boldsymbol{\eta}=0}{\mu=\eta=0}) or not. Default to \code{TRUE}.
-#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if noncentered. Parameter ignored if centered=TRUE. Default to \code{TRUE}.
+#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if non-centered. Parameter ignored if centered=TRUE. Default to \code{TRUE}.
 #' @param scale A string indicating the scaling method. Returned without being checked or used in the function body. Default to \code{"norm"}.
 #' @param diagonal_multiplier A number >= 1, the diagonal multiplier.
 #' @return A list that contains the elements necessary for estimation.
@@ -366,13 +382,13 @@ get_elts_ab <- function(hdx, hpdx, x, a, b, setting,
 #' K <- diag(p)
 #' domain <- make_domain("R+", p=p)
 #' x <- gen(n, setting="exp", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100,
-#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=TRUE)
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 1, 3)
 #' h_hp_dx <- h_of_dist(h_hp, x, domain) # h and h' applied to distance from x to boundary
-#' get_elts_exp(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=TRUE, scale="norm", diag=1.5)
-#' get_elts_exp(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE, profiled_if_noncenter=TRUE,
+#' elts <- get_elts_exp(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=TRUE, scale="norm", diag=1.5)
+#' elts <- get_elts_exp(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE, profiled_if_noncenter=TRUE,
 #'       scale="norm", diag=1.7)
-#' get_elts_exp(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE, profiled_if_noncenter=FALSE,
+#' elts <- get_elts_exp(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE, profiled_if_noncenter=FALSE,
 #'       scale="norm", diag=1.7)
 #' @export
 get_elts_exp <- function(hdx, hpdx, x, centered=TRUE, profiled_if_noncenter=TRUE, scale="", diagonal_multiplier=1){
@@ -411,7 +427,7 @@ get_elts_exp <- function(hdx, hpdx, x, centered=TRUE, profiled_if_noncenter=TRUE
 #' @param hpdx A matrix, \eqn{h'(\mathbf{x})}{h\'(x)} applied to the distance of x from the boundary of the domain, should be of the same dimension as \code{x}.
 #' @param x An \code{n} by \code{p} matrix, the data matrix, where \code{n} is the sample size and \code{p} the dimension.
 #' @param centered A boolean, whether in the centered setting (assume \eqn{\boldsymbol{\mu}=\boldsymbol{\eta}=0}{\mu=\eta=0}) or not. Default to \code{TRUE}.
-#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if noncentered. Parameter ignored if centered=TRUE. Default to \code{TRUE}.
+#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if non-centered. Parameter ignored if centered=TRUE. Default to \code{TRUE}.
 #' @param scale A string indicating the scaling method. Returned without being checked or used in the function body. Default to \code{"norm"}.
 #' @param diagonal_multiplier A number >= 1, the diagonal multiplier.
 #' @return A list that contains the elements necessary for estimation.
@@ -435,14 +451,14 @@ get_elts_exp <- function(hdx, hpdx, x, centered=TRUE, profiled_if_noncenter=TRUE
 #' eta <- rep(0, p)
 #' K <- diag(p)
 #' domain <- make_domain("R+", p=p)
-#' x <- gen(n, setting="gamma", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="gamma", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100,
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 1.5, 3)
 #' h_hp_dx <- h_of_dist(h_hp, x, domain) # h and h' applied to distance from x to boundary
-#' get_elts_gamma(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=TRUE, scale="norm", diag=1.5)
-#' get_elts_gamma(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE, profiled_if_noncenter=TRUE,
+#' elts <- get_elts_gamma(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=TRUE, scale="norm", diag=1.5)
+#' elts <- get_elts_gamma(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE, profiled_if_noncenter=TRUE,
 #'        scale="norm", diag=1.7)
-#' get_elts_gamma(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE, profiled_if_noncenter=FALSE,
+#' elts <- get_elts_gamma(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE, profiled_if_noncenter=FALSE,
 #'        scale="norm", diag=1.9)
 #' @export
 get_elts_gamma <- function(hdx, hpdx, x, centered=TRUE, profiled_if_noncenter=TRUE, scale="", diagonal_multiplier=1){
@@ -479,7 +495,7 @@ get_elts_gamma <- function(hdx, hpdx, x, centered=TRUE, profiled_if_noncenter=TR
 #' @param hpdx A matrix, \eqn{h'(\mathbf{x})}{h\'(x)} applied to the distance of x from the boundary of the domain, should be of the same dimension as \code{x}.
 #' @param x An \code{n} by \code{p} matrix, the data matrix, where \code{n} is the sample size and \code{p} the dimension.
 #' @param centered A boolean, whether in the centered setting (assume \eqn{\boldsymbol{\mu}=\boldsymbol{\eta}=0}{\mu=\eta=0}) or not. Default to \code{TRUE}.
-#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if noncentered. Parameter ignored if centered=TRUE. Default to \code{TRUE}.
+#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if non-centered. Parameter ignored if centered=TRUE. Default to \code{TRUE}.
 #' @param scale A string indicating the scaling method. Returned without being checked or used in the function body. Default to \code{"norm"}.
 #' @param diagonal_multiplier A number >= 1, the diagonal multiplier.
 #' @return A list that contains the elements necessary for estimation.
@@ -504,14 +520,14 @@ get_elts_gamma <- function(hdx, hpdx, x, centered=TRUE, profiled_if_noncenter=TR
 #' K <- diag(p)
 #' eta <- K %*% mu
 #' domain <- make_domain("R+", p=p)
-#' x <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 1, 3)
 #' h_hp_dx <- h_of_dist(h_hp, x, domain) # h and h' applied to distance from x to boundary
-#' get_elts_trun_gauss(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=TRUE, scale="norm", diag=1.5)
-#' get_elts_trun_gauss(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE,
+#' elts <- get_elts_trun_gauss(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=TRUE, scale="norm", diag=1.5)
+#' elts <- get_elts_trun_gauss(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE,
 #'        profiled_if_noncenter=TRUE, scale="norm", diag=1.7)
-#' get_elts_trun_gauss(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE,
+#' elts <- get_elts_trun_gauss(h_hp_dx$hdx, h_hp_dx$hpdx, x, centered=FALSE,
 #'        profiled_if_noncenter=FALSE, scale="norm", diag=1.9)
 #' @export
 get_elts_trun_gauss <- function(hdx, hpdx, x, centered=TRUE, profiled_if_noncenter=TRUE, scale="", diagonal_multiplier=1){
@@ -541,7 +557,7 @@ get_elts_trun_gauss <- function(hdx, hpdx, x, centered=TRUE, profiled_if_noncent
 #'
 #' @param x An \code{n} by \code{p} matrix, the data matrix, where \code{n} is the sample size and \code{p} the dimension.
 #' @param centered A boolean, whether in the centered setting (assume \eqn{\boldsymbol{\mu}=\boldsymbol{\eta}=0}{\mu=\eta=0}) or not. Default to \code{TRUE}.
-#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if noncentered. Parameter ignored if \code{centered==TRUE}. Default to \code{TRUE}.
+#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if non-centered. Parameter ignored if \code{centered==TRUE}. Default to \code{TRUE}.
 #' @param scale A string indicating the scaling method. Returned without being checked or used in the function body. Default to \code{"norm"}.
 #' @param diagonal_multiplier A number >= 1, the diagonal multiplier.
 #' @return A list that contains the elements necessary for estimation.
@@ -565,10 +581,10 @@ get_elts_trun_gauss <- function(hdx, hpdx, x, centered=TRUE, profiled_if_noncent
 #' # Equivalently:
 #' \donttest{
 #' x2 <- gen(n, setting="gaussian", abs=FALSE, eta=c(K%*%mu), K=K, domain=make_domain("R",p),
-#'        finite_infinity=100, xinit=NULL, burn_in=1000, thinning=100)
+#'        finite_infinity=100, xinit=NULL, burn_in=1000, thinning=100, verbose=FALSE)
 #' }
-#' get_elts_gauss(x, centered=TRUE, scale="norm", diag=1.5)
-#' get_elts_gauss(x, centered=FALSE, profiled=FALSE, scale="sd", diag=1.9)
+#' elts <- get_elts_gauss(x, centered=TRUE, scale="norm", diag=1.5)
+#' elts <- get_elts_gauss(x, centered=FALSE, profiled=FALSE, scale="sd", diag=1.9)
 #' @export
 get_elts_gauss <- function(x, centered=TRUE, profiled_if_noncenter=TRUE, scale="", diagonal_multiplier=1){
   n <- dim(x)[1]; p <- dim(x)[2]
@@ -597,7 +613,7 @@ get_elts_gauss <- function(x, centered=TRUE, profiled_if_noncenter=TRUE, scale="
 #' @param x An \code{n} by \code{p} matrix, the data matrix, where \code{n} is the sample size and \code{p} the dimension.
 #' @param setting A string, log_log.
 #' @param centered A boolean, whether in the centered setting (assume \eqn{\boldsymbol{\mu}=\boldsymbol{\eta}=0}{\mu=\eta=0}) or not. Default to \code{TRUE}.
-#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if noncentered. Parameter ignored if centered=TRUE. Default to \code{TRUE}.
+#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if non-centered. Parameter ignored if centered=TRUE. Default to \code{TRUE}.
 #' @param scale A string indicating the scaling method. Returned without being checked or used in the function body. Default to \code{"norm"}.
 #' @param diagonal_multiplier A number >= 1, the diagonal multiplier.
 #' @return A list that contains the elements necessary for estimation.
@@ -622,14 +638,14 @@ get_elts_gauss <- function(x, centered=TRUE, profiled_if_noncenter=TRUE, scale="
 #' K <- diag(p)
 #' domain <- make_domain("uniform", p=p, lefts=c(0), rights=c(1))
 #' x <- gen(n, setting="log_log", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=TRUE)
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 1.5, 3)
 #' h_hp_dx <- h_of_dist(h_hp, x, domain) # h and h' applied to distance from x to boundary
-#' get_elts_loglog(h_hp_dx$hdx, h_hp_dx$hpdx, x, setting="log_log", centered=TRUE,
+#' elts <- get_elts_loglog(h_hp_dx$hdx, h_hp_dx$hpdx, x, setting="log_log", centered=TRUE,
 #'        scale="", diag=1.5)
-#' get_elts_loglog(h_hp_dx$hdx, h_hp_dx$hpdx, x, setting="log_log", centered=FALSE,
+#' elts <- get_elts_loglog(h_hp_dx$hdx, h_hp_dx$hpdx, x, setting="log_log", centered=FALSE,
 #'        profiled_if_noncenter=TRUE, scale="", diag=1.7)
-#' get_elts_loglog(h_hp_dx$hdx, h_hp_dx$hpdx, x, setting="log_log", centered=FALSE,
+#' elts <- get_elts_loglog(h_hp_dx$hdx, h_hp_dx$hpdx, x, setting="log_log", centered=FALSE,
 #'        profiled_if_noncenter=FALSE, scale="", diag=1.9)
 #' @export
 get_elts_loglog <- function(hdx, hpdx, x, setting, centered=TRUE,
@@ -680,7 +696,7 @@ get_elts_loglog <- function(hdx, hpdx, x, setting, centered=TRUE,
 #' @param x An \code{n} by \code{p} matrix, the data matrix, where \code{n} is the sample size and \code{p} the dimension.
 #' @param setting A string, log_log or log_log_sum0. If log_log_sum0, assumes that the true K has row and column sums 0 (see the A^d model), so only the off-diagonal entries will be estimated; the diagonal entries will be profiled out in the loss), so elements corresponding to the diagonals of K will be set to 0, and the loss will be rewritten in the off-diagonal entries only.
 #' @param centered A boolean, whether in the centered setting (assume \eqn{\boldsymbol{\mu}=\boldsymbol{\eta}=0}{\mu=\eta=0}) or not. Default to \code{TRUE}.
-#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if noncentered. Parameter ignored if centered=TRUE. Default to \code{TRUE}.
+#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if non-centered. Parameter ignored if centered=TRUE. Default to \code{TRUE}.
 #' @param scale A string indicating the scaling method. Returned without being checked or used in the function body. Default to \code{"norm"}.
 #' @param diagonal_multiplier A number >= 1, the diagonal multiplier.
 #' @return A list that contains the elements necessary for estimation.
@@ -707,7 +723,7 @@ get_elts_loglog <- function(hdx, hpdx, x, setting, centered=TRUE,
 #' eigen(K)$val[(p-1):p] # Make sure K has one 0 and p-1 positive eigenvalues
 #' domain <- make_domain("simplex", p=p)
 #' x <- gen(n, setting="log_log_sum0", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=TRUE)
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 2, 3)
 #' h_hp_dx <- h_of_dist(h_hp, x, domain) # h and h' applied to distance from x to boundary
 #'
@@ -824,7 +840,7 @@ get_elts_loglog_simplex <- function(hdx, hpdx, x, setting,
 #' @param setting A string that indicates the distribution type, must be one of \code{"exp"}, \code{"gamma"}, \code{"gaussian"}, \code{"log_log"}, \code{"log_log_sum0"}, or of the form \code{"ab_NUM1_NUM2"}, where \code{NUM1} is the \code{a} value and \code{NUM2} is the \code{b} value, and \code{NUM1} and \code{NUM2} must be integers or two integers separated by "/", e.g. "ab_2_2", "ab_2_5/4" or "ab_2/3_1/2". If \code{domain$type == "simplex"}, only \code{"log_log"} and \code{"log_log_sum0"} are supported, and on the other hand \code{"log_log_sum0"} is supported for \code{domain$type == "simplex"} only.
 #' @param domain A list returned from \code{make_domain()} that represents the domain.
 #' @param centered A boolean, whether in the centered setting(assume \eqn{\boldsymbol{\mu}=\boldsymbol{\eta}=0}{\mu=\eta=0}) or not. Default to \code{TRUE}.
-#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if noncentered. Parameter ignored if \code{centered=TRUE}. Default to \code{TRUE}. Can only be \code{FALSE} if \code{setting == "log_log_sum0" && centered == FALSE}.
+#' @param profiled_if_noncenter A boolean, whether in the profiled setting (\eqn{\lambda_{\boldsymbol{\eta}}=0}{\lambda_\eta=0}) if non-centered. Parameter ignored if \code{centered=TRUE}. Default to \code{TRUE}. Can only be \code{FALSE} if \code{setting == "log_log_sum0" && centered == FALSE}.
 #' @param scale A string indicating the scaling method. If contains \code{"sd"}, columns are scaled by standard deviation; if contains \code{"norm"}, columns are scaled by l2 norm; if contains \code{"center"} and \code{setting == "gaussian" && domain$type == "R"}, columns are centered to have mean zero. Default to \code{"norm"}.
 #' @param diagonal_multiplier A number >= 1, the diagonal multiplier.
 #' @param use_C Optional. A boolean, use C (\code{TRUE}) or R (\code{FALSE}) functions for computation. Default to \code{TRUE}. Ignored if \code{setting == "gaussian" && domain$type == "R"}.
@@ -880,11 +896,11 @@ get_elts_loglog_simplex <- function(hdx, hpdx, x, setting,
 #' x <- mvtnorm::rmvnorm(n, mean=solve(K, eta), sigma=solve(K))
 #' # Equivalently:
 #' \donttest{
-#' x2 <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, burn_in=1000, thinning=100)
+#' x2 <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'         xinit=NULL, burn_in=1000, thinning=100, verbose=FALSE)
 #' }
-#' get_elts(NULL, x, "gaussian", domain, centered=TRUE, scale="norm", diag=dm)
-#' get_elts(NULL, x, "gaussian", domain, FALSE, profiled=FALSE, scale="sd", diag=dm)
+#' elts <- get_elts(NULL, x, "gaussian", domain, centered=TRUE, scale="norm", diag=dm)
+#' elts <- get_elts(NULL, x, "gaussian", domain, FALSE, profiled=FALSE, scale="sd", diag=dm)
 #'
 #' # Gaussian on R_+^p:
 #' domain <- make_domain("R+", p=p)
@@ -894,29 +910,29 @@ get_elts_loglog_simplex <- function(hdx, hpdx, x, setting,
 #' # Equivalently:
 #' \donttest{
 #' x2 <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, burn_in=1000, thinning=100)
+#'        finite_infinity=100, xinit=NULL, burn_in=1000, thinning=100, verbose=FALSE)
 #' }
 #' h_hp <- get_h_hp("min_pow", 1, 3)
-#' get_elts(h_hp, x, "gaussian", domain, centered=TRUE, scale="norm", diag=dm)
+#' elts <- get_elts(h_hp, x, "gaussian", domain, centered=TRUE, scale="norm", diag=dm)
 #'
 #' # Gaussian on sum(x^2) > 1 && sum(x^(1/3)) > 1 with x allowed to be negative
 #' domain <- make_domain("polynomial", p=p, rule="1 && 2",
 #'        ineqs=list(list("expression"="sum(x^2)>1", abs=FALSE, nonnegative=FALSE),
 #'                       list("expression"="sum(x^(1/3))>1", abs=FALSE, nonnegative=FALSE)))
 #' xinit <- rep(sqrt(2/p), p)
-#' x <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=xinit, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=xinit, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 1, 3)
-#' get_elts(h_hp, x, "gaussian", domain, centered=FALSE,
+#' elts <- get_elts(h_hp, x, "gaussian", domain, centered=FALSE,
 #'        profiled_if_noncenter=TRUE, scale="", diag=dm)
 #'
 #' # exp on ([0, 1] v [2,3])^p
 #' domain <- make_domain("uniform", p=p, lefts=c(0,2), rights=c(1,3))
 #' x <- gen(n, setting="exp", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=TRUE)
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 1.5, 3)
-#' get_elts(h_hp, x, "exp", domain, centered=TRUE, scale="", diag=dm)
-#' get_elts(h_hp, x, "exp", domain, centered=FALSE,
+#' elts <- get_elts(h_hp, x, "exp", domain, centered=TRUE, scale="", diag=dm)
+#' elts <- get_elts(h_hp, x, "exp", domain, centered=FALSE,
 #'        profiled_if_noncenter=FALSE, scale="", diag=dm)
 #'
 #' # gamma on {x1 > 1 && log(1.3) < x2 < 1 && x3 > log(1.3) && ... && xp > log(1.3)}
@@ -926,11 +942,11 @@ get_elts_loglog_simplex <- function(hdx, hpdx, x, setting,
 #'                       list("expression"="exp(x)>1.3", abs=FALSE, nonnegative=TRUE)))
 #' set.seed(1)
 #' xinit <- c(1.5, 0.5, abs(stats::rnorm(p-2))+log(1.3))
-#' x <- gen(n, setting="gamma", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=xinit, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="gamma", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=xinit, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 1.5, 3)
-#' get_elts(h_hp, x, "gamma", domain, centered=TRUE, scale="", diag=dm)
-#' get_elts(h_hp, x, "gamma", domain, centered=FALSE,
+#' elts <- get_elts(h_hp, x, "gamma", domain, centered=TRUE, scale="", diag=dm)
+#' elts <- get_elts(h_hp, x, "gamma", domain, centered=FALSE,
 #'        profiled_if_noncenter=FALSE, scale="", diag=dm)
 #'
 #' # a0.6_b0.7 on {x in R_+^p: sum(log(x))<2 || (x1^(2/3)-1.3x2^(-3)<1 && exp(x1)+2.3*x2>2)}
@@ -939,11 +955,11 @@ get_elts_loglog_simplex <- function(hdx, hpdx, x, setting,
 #'                       list("expression"="x1^(2/3)-1.3x2^(-3)<1", abs=FALSE, nonnegative=TRUE),
 #'                       list("expression"="exp(x1)+2.3*x2^2>2", abs=FALSE, nonnegative=TRUE)))
 #' xinit <- rep(1, p)
-#' x <- gen(n, setting="ab_3/5_7/10", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=xinit, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="ab_3/5_7/10", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=xinit, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 1.4, 3)
-#' get_elts(h_hp, x, "ab_3/5_7/10", domain, centered=TRUE, scale="", diag=dm)
-#' get_elts(h_hp, x, "ab_3/5_7/10", domain, centered=FALSE,
+#' elts <- get_elts(h_hp, x, "ab_3/5_7/10", domain, centered=TRUE, scale="", diag=dm)
+#' elts <- get_elts(h_hp, x, "ab_3/5_7/10", domain, centered=FALSE,
 #'        profiled_if_noncenter=TRUE, scale="", diag=dm)
 #'
 #' # log_log model on {x in R_+^p: sum_j j * xj <= 1}
@@ -953,10 +969,10 @@ get_elts_loglog_simplex <- function(hdx, hpdx, x, setting,
 #'                      abs=FALSE, nonnegative=TRUE)))
 #' x <- gen(n, setting="log_log", abs=FALSE, eta=eta, K=K, domain=domain,
 #'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100,
-#'        verbose=TRUE)
+#'        verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 2, 3)
-#' get_elts(h_hp, x, "log_log", domain, centered=TRUE, scale="", diag=dm)
-#' get_elts(h_hp, x, "log_log", domain, centered=FALSE,
+#' elts <- get_elts(h_hp, x, "log_log", domain, centered=TRUE, scale="", diag=dm)
+#' elts <- get_elts(h_hp, x, "log_log", domain, centered=FALSE,
 #'        profiled_if_noncenter=FALSE, scale="", diag=dm)
 #' # Example of using the uniform distance function to boundary as in Liu (2019)
 #' g0 <- function(x) {
@@ -974,7 +990,7 @@ get_elts_loglog_simplex <- function(hdx, hpdx, x, setting,
 #'        }))
 #'        list("g0"=g0, "g0d"=g0d)
 #' }
-#' get_elts(NULL, x, "exp", domain, centered=TRUE, profiled_if_noncenter=FALSE,
+#' elts <- get_elts(NULL, x, "exp", domain, centered=TRUE, profiled_if_noncenter=FALSE,
 #'        scale="", diag=dm, unif_dist=g0)
 #'
 #' # log_log_sum0 model on the simplex with K having row and column sums 0 (Aitchison model)
@@ -983,7 +999,7 @@ get_elts_loglog_simplex <- function(hdx, hpdx, x, setting,
 #' diag(K) <- diag(K) - rowSums(K) # So that rowSums(K) == colSums(K) == 0
 #' eigen(K)$val[(p-1):p] # Make sure K has one 0 and p-1 positive eigenvalues
 #' x <- gen(n, setting="log_log_sum0", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=TRUE)
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' h_hp <- get_h_hp("min_pow", 2, 3)
 #' h_hp_dx <- h_of_dist(h_hp, x, domain) # h and h' applied to distance from x to boundary
 #'
@@ -1230,13 +1246,13 @@ get_elts <- function(h_hp, x, setting, domain, centered=TRUE, profiled_if_noncen
 #'        ineqs=list(list("expression"="sum(x^2)>10", abs=FALSE, nonnegative=FALSE),
 #'                       list("expression"="sum(x^(1/3))>10", abs=FALSE, nonnegative=FALSE)))
 #' xinit <- rep(sqrt(20/p), p)
-#' x <- gen(n, setting="gaussian", abs=FALSE, eta=eta,  K=K, domain=domain,
-#'        finite_infinity=100, xinit=xinit, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="gaussian", abs=FALSE, eta=eta,  K=K, domain=domain, finite_infinity=100, 
+#'        xinit=xinit, seed=2, burn_in=500, thinning=100, verbose=FALSE)
 #'
 #' # exp on ([0, 1] v [2,3])^p
 #' domain <- make_domain("uniform", p=p, lefts=c(0,2), rights=c(1,3))
-#' x <- gen(n, setting="exp", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=TRUE)
+#' x <- gen(n, setting="exp", abs=FALSE, eta=eta, K=K, domain=domain, xinit=NULL, 
+#'        seed=2, burn_in=500, thinning=100, verbose=TRUE)
 #'
 #' # gamma on {x1 > 1 && log(1.3) < x2 < 1 && x3 > log(1.3) && ... && xp > log(1.3)}
 #' domain <- make_domain("polynomial", p=p, rule="1 && 2 && 3",
@@ -1245,8 +1261,8 @@ get_elts <- function(h_hp, x, setting, domain, centered=TRUE, profiled_if_noncen
 #'                       list("expression"="exp(x)>1.3", abs=FALSE, nonnegative=FALSE)))
 #' set.seed(1)
 #' xinit <- c(1.5, 0.5, abs(stats::rnorm(p-2))+log(1.3))
-#' x <- gen(n, setting="gamma", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=xinit, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="gamma", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=xinit, seed=2, burn_in=500, thinning=100, verbose=FALSE)
 #'
 #' # a0.6_b0.7 on {x in R_+^p: sum(log(x))<2 || (x1^(2/3)-1.3x2^(-3)<1 && exp(x1)+2.3*x2>2)}
 #' domain <- make_domain("polynomial", p=p, rule="1 || (2 && 3)",
@@ -1254,31 +1270,31 @@ get_elts <- function(h_hp, x, setting, domain, centered=TRUE, profiled_if_noncen
 #'                       list("expression"="x1^(2/3)-1.3x2^(-3)<1", abs=FALSE, nonnegative=TRUE),
 #'                       list("expression"="exp(x1)+2.3*x2^2>2", abs=FALSE, nonnegative=TRUE)))
 #' xinit <- rep(1, p)
-#' x <- gen(n, setting="ab_3/5_7/10", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=1e4, xinit=xinit, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="ab_3/5_7/10", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=1e4, 
+#'        xinit=xinit, seed=2, burn_in=500, thinning=100, verbose=FALSE)
 #'
 #' # log_log model exp(-log(x) %*% K %*% log(x)/2 + eta %*% log(x)) on {x in R_+^p: sum_j j * xj <= 1}
 #' domain <- make_domain("polynomial", p=p,
 #'        ineqs=list(list("expression"=paste(paste(sapply(1:p,
 #'                            function(j){paste(j, "x", j, sep="")}), collapse="+"), "<1"),
 #'                      abs=FALSE, nonnegative=TRUE)))
-#' x <- gen(n, setting="log_log", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="log_log", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=NULL, seed=2, burn_in=500, thinning=100, verbose=FALSE)
 #'
 #' # log_log model on the simplex with K having row and column sums 0 (Aitchison model)
 #' domain <- make_domain("simplex", p=p)
 #' K <- -cov_cons("band", p=p, spars=3, eig=1)
 #' diag(K) <- diag(K) - rowSums(K) # So that rowSums(K) == colSums(K) == 0
 #' eigen(K)$val[(p-1):p] # Make sure K has one 0 and p-1 positive eigenvalues
-#' x <- gen(n, setting="log_log_sum0", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=TRUE)
+#' x <- gen(n, setting="log_log_sum0", abs=FALSE, eta=eta, K=K, domain=domain, xinit=NULL, 
+#'        seed=2, burn_in=500, thinning=100, verbose=FALSE)
 #'
 #' # Gumbel_Gumbel model exp(-exp(2x) %*% K %*% exp(2x)/2 + eta %*% exp(-3x)) on {sum(|x|) < 1}
 #' domain <- make_domain("polynomial", p=p,
 #'        ineqs=list(list("expression"="sum(x)<1", abs=TRUE, nonnegative=FALSE)))
 #' K <- diag(p)
-#' x <- gen(n, setting="ab_2/0_-3/0", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="ab_2/0_-3/0", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=NULL, seed=2, burn_in=500, thinning=100, verbose=FALSE)
 #' @export
 #' @useDynLib genscore, .registration = TRUE
 gen <- function(n, setting, abs, eta, K, domain, finite_infinity=NULL,
@@ -1325,8 +1341,9 @@ gen <- function(n, setting, abs, eta, K, domain, finite_infinity=NULL,
     Sigma <- solve(K)
     return (mvtnorm::rmvnorm(n, mean=c(Sigma%*%eta), sigma=Sigma))
   } else if (setting == "gaussian" && domain$type == "R+") {
-    Sigma <- solve(K)
-    return (tmvtnorm::rtmvnorm(n, mean=c(Sigma%*%eta), sigma=Sigma,
+    Sigma <- solve(K); mu <- c(Sigma%*%eta)
+    if (domain$p == 1) Sigma <- sqrt(Sigma) ## Problem with rtmvnorm?
+    return (tmvtnorm::rtmvnorm(n, mean=mu, sigma=Sigma,
                                lower=rep(0, domain$p),
                                upper=rep(Inf, domain$p), algorithm = "gibbs",
                                burn.in.samples = burn_in, thinning = thinning))
@@ -1393,10 +1410,8 @@ gen <- function(n, setting, abs, eta, K, domain, finite_infinity=NULL,
                               #seed=as.integer(seed),
                               finite_infinity=as.double(finite_infinity)),
                          domain_for_C(domain),
-                         list("verbose"=as.integer(verbose), "errno"=as.integer(0))
+                         list("verbose"=as.integer(verbose))
   ))
-  if (res$errno)
-    stop("Error occurred in C -> rab_arms() called in gen(). Check if the density is well-defined on your domain. (If any fractional powers are involved, i.e. a and/or b are non-integer, the domain must be non-negative.)")
   x <- t(matrix(res$xres, nrow=domain$p))
   if (remove_outofbound) {
     if (verbose)
@@ -1433,8 +1448,8 @@ gen <- function(n, setting, abs, eta, K, domain, finite_infinity=NULL,
 #' x <- mvtnorm::rmvnorm(n, mean=solve(K, eta), sigma=solve(K))
 #' # Equivalently:
 #' \donttest{
-#' x2 <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, burn_in=1000, thinning=100)
+#' x2 <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'         xinit=NULL, burn_in=1000, thinning=100, verbose=FALSE)
 #' }
 #' dist <- get_dist(x, domain)
 #' # dx is all Inf and dpx is all 0 since each coordinate is unbounded with domain R
@@ -1442,8 +1457,8 @@ gen <- function(n, setting, abs, eta, K, domain, finite_infinity=NULL,
 #'
 #' # exp on R_+^p:
 #' domain <- make_domain("R+", p=p)
-#' x <- gen(n, setting="exp", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="exp", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' dist <- get_dist(x, domain)
 #' # dx is x and dpx is 1; with domain R+, the distance of x to the boundary is just x itself
 #' c(max(abs(dist$dx - x))<.Machine$double.eps^0.5, all(dist$dpx == 1))
@@ -1451,8 +1466,8 @@ gen <- function(n, setting, abs, eta, K, domain, finite_infinity=NULL,
 #' # Gaussian on sum(x^2) > p with x allowed to be negative
 #' domain <- make_domain("polynomial", p=p,
 #'        ineqs=list(list("expression"=paste("sum(x^2)>", p), abs=FALSE, nonnegative=FALSE)))
-#' x <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="gaussian", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' dist <- get_dist(x, domain)
 #' quota <- p - (rowSums(x^2) - x^2) # How much should xij^2 at least be so that sum(xi^2) > p?
 #' # How far is xij from +/-sqrt(quota), if quota >= 0?
@@ -1467,7 +1482,7 @@ gen <- function(n, setting, abs, eta, K, domain, finite_infinity=NULL,
 #' # gamma on ([0, 1] v [2,3])^p
 #' domain <- make_domain("uniform", p=p, lefts=c(0,2), rights=c(1,3))
 #' x <- gen(n, setting="gamma", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=TRUE)
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' dist <- get_dist(x, domain)
 #' # If 0 <= xij <= 1, distance to boundary is min(x-0, 1-x)
 #' max(abs(dist$dx - pmin(x, 1-x))[x >= 0 & x <= 1])
@@ -1489,7 +1504,7 @@ gen <- function(n, setting, abs, eta, K, domain, finite_infinity=NULL,
 #' xinit <- c(1.5, 0.5, abs(stats::rnorm(p-2)) + log(1.3))
 #' x <- gen(n, setting="ab_3/5_7/10", abs=FALSE, eta=eta, K=K, domain=domain,
 #'        finite_infinity=100, xinit=xinit, seed=2, burn_in=1000, thinning=100,
-#'        verbose=TRUE)
+#'        verbose=FALSE)
 #' dist <- get_dist(x, domain)
 #' # x_{i1} has uniform bound [1, +Inf), so its distance to its boundary is x_{i1} - 1
 #' max(abs(dist$dx[,1] - (x[,1] - 1)))
@@ -1510,8 +1525,8 @@ gen <- function(n, setting, abs, eta, K, domain, finite_infinity=NULL,
 #'        ineqs=list(list("expression"=paste(paste(sapply(1:p,
 #'                            function(j){paste(j, "x", j, sep="")}), collapse="+"), "<1"),
 #'                      abs=FALSE, nonnegative=TRUE)))
-#' x <- gen(n, setting="log_log", abs=FALSE, eta=eta, K=K, domain=domain,
-#'        finite_infinity=100, xinit=NULL, seed=2, burn_in=1000, thinning=100)
+#' x <- gen(n, setting="log_log", abs=FALSE, eta=eta, K=K, domain=domain, finite_infinity=100, 
+#'        xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' dist <- get_dist(x, domain)
 #' # Upper bound for j * xij so that sum_j j * xij <= 1
 #' quota <- 1 - (rowSums(t(t(x) * 1:p)) - t(t(x) * 1:p))
@@ -1524,7 +1539,7 @@ gen <- function(n, setting, abs, eta, K, domain, finite_infinity=NULL,
 #' diag(K) <- diag(K) - rowSums(K) # So that rowSums(K) == colSums(K) == 0
 #' eigen(K)$val[(p-1):p] # Make sure K has one 0 and p-1 positive eigenvalues
 #' x <- gen(n, setting="log_log_sum0", abs=FALSE, eta=eta, K=K, domain=domain,
-#'         xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=TRUE)
+#'         xinit=NULL, seed=2, burn_in=1000, thinning=100, verbose=FALSE)
 #' # Note that dist$dx and dist$dpx only has p-1 columns -- excluding the last coordinate in x
 #' dist <- get_dist(x, domain)
 #' # Upper bound for x_{i,j} so that x_{i,1} + ... + x_{i,p-1} <= 1
@@ -1562,10 +1577,7 @@ get_dist <- function(x, domain){
                           x=as.double(t(x)),
                           dists=numeric(length(x)),
                           dist_ps=integer(length(x))),
-                     domain_for_C(domain),
-                     list("errno"=as.integer(0))))
-    if (res$errno)
-      stop("Error occurred in C -> dist().")
+                     domain_for_C(domain)))
     return (list("dx"=t(matrix(res$dists, domain$p_deemed, nrow(x))),
                  "dpx"=t(matrix(res$dist_ps, domain$p_deemed, nrow(x)))))
   } else if (domain$type == "R") {
@@ -1805,7 +1817,7 @@ get_h_hp_vector <- function(mode, para=NULL, para2=NULL){
 #'              \code{elts$profiled_if_noncenter == FALSE}.}
 #' @details
 #' If \code{elts$domain_type == "simplex"}, \code{symmetric != "symmetric"} or \code{elts$centered == FALSE && elts$profiled_if_noncenter} are currently not supported.
-#' If \code{elts$domain_type == "simplex"} and \code{elts$setting} constains substring \code{"sum0"}, it is assumed that the column and row sums of \code{K} are all 0 and estimation will be done by profiling out the diagonal entries.
+#' If \code{elts$domain_type == "simplex"} and \code{elts$setting} contains substring \code{"sum0"}, it is assumed that the column and row sums of \code{K} are all 0 and estimation will be done by profiling out the diagonal entries.
 #' @examples
 #' # Examples are shown for Gaussian truncated to R+^p only. For other distributions
 #' #   on other types of domains, please refer to \code{gen()} or \code{get_elts()}, as the
@@ -2324,7 +2336,7 @@ s_output <- function(out, verbose, verbosetext){
 #' @param nsamp Number of samples.
 #' @param nfold Number of cross validation folds.
 #' @param cv_fold_seed Seed for random shuffling.
-#' @return A list of \code{nsamp} vectors, numbers 1 to \code{nsamp} shuffled and groupped into vectors of length \code{floor(nsamp/nfold)} followed by vectors of length \code{floor(nsamp/nfold)+1}.
+#' @return A list of \code{nsamp} vectors, numbers 1 to \code{nsamp} shuffled and grouped into vectors of length \code{floor(nsamp/nfold)} followed by vectors of length \code{floor(nsamp/nfold)+1}.
 #' @examples
 #' make_folds(37, 5, NULL)
 #' make_folds(100, 5, 2)
@@ -2406,13 +2418,14 @@ make_folds <- function(nsamp, nfold, cv_fold_seed){
 #'
 #' ## Centered estimates, no elts or h provided, mode and params provided
 #' est1 <- estimate(x, "gaussian", domain=domain, elts=NULL, centered=TRUE,
-#'           symmetric="symmetric", lambda1s=lambda1s, mode="min_pow",
-#'           param1=1, param2=3, diag=dm, return_raw=TRUE)
+#'           symmetric="symmetric", lambda1s=lambda1s, mode="min_pow", 
+#'           param1=1, param2=3, diag=dm, return_raw=TRUE, verbose=FALSE)
 #'
 #' h_hp <- get_h_hp("min_pow", 1, 3)
 #' ## Centered estimates, no elts provided, h provided; equivalent to est1
 #' est2 <- estimate(x, "gaussian", domain=domain, elts=NULL, centered=TRUE,
-#'           symmetric="symmetric", lambda1s=lambda1s, h_hp=h_hp, diag=dm, return_raw=TRUE)
+#'           symmetric="symmetric", lambda1s=lambda1s, h_hp=h_hp, diag=dm, 
+#'           return_raw=TRUE, verbose=FALSE)
 #' compare_two_results(est1, est2) ## Should be almost all 0
 #'
 #' elts_gauss_c <- get_elts(h_hp, x, setting="gaussian", domain=domain,
@@ -2421,13 +2434,13 @@ make_folds <- function(nsamp, nfold, cv_fold_seed){
 #' ## Here diagonal_multiplier will be set to the default value, equal to dm above
 #' est3 <- estimate(x, "gaussian", domain=domain, elts=elts_gauss_c,
 #'           symmetric="symmetric", lambda1s=lambda1s, diag=NULL,
-#'           return_raw=TRUE)
+#'           return_raw=TRUE, verbose=FALSE)
 #' compare_two_results(est1, est3) ## Should be almost all 0
 #'
-#' ## Noncentered estimates with Inf penalty on eta; equivalent to est1~3
+#' ## Non-centered estimates with Inf penalty on eta; equivalent to est1~3
 #' est4 <- estimate(x, "gaussian", domain=domain, elts=NULL, centered=FALSE,
 #'           lambda_ratio=0, symmetric="symmetric", lambda1s=lambda1s,
-#'           h=h_hp, diag=dm, return_raw=TRUE)
+#'           h=h_hp, diag=dm, return_raw=TRUE, verbose=FALSE)
 #' sum(abs(est4$etas)) ## Should be 0 since non-centered with lambda ratio 0 is equivalent to centered
 #' est4$etas <- NULL ## But different from est1 in that the zero etas are returned in est4
 #' compare_two_results(est1, est4) ## Should be almost all 0
@@ -2435,13 +2448,13 @@ make_folds <- function(nsamp, nfold, cv_fold_seed){
 #'
 #' ## Profiled estimates, no elts or h provided, mode and params provided
 #' est5 <- estimate(x, "gaussian", domain=domain, elts=NULL, centered=FALSE,
-#'           lambda_ratio=Inf, symmetric="or", lambda1s=lambda1s,
-#'           mode="min_pow", param1=1, param2=3, diag=dm, return_raw=TRUE)
+#'           lambda_ratio=Inf, symmetric="or", lambda1s=lambda1s, mode="min_pow", 
+#'           param1=1, param2=3, diag=dm, return_raw=TRUE, verbose=FALSE)
 #'
 #' ## Profiled estimates, no elts provided, h provided; equivalent to est5
 #' est6 <- estimate(x, "gaussian", domain=domain, elts=NULL, centered=FALSE,
 #'           lambda_ratio=Inf, symmetric="or", lambda1s=lambda1s,
-#'           h_hp=h_hp, diag=dm, return_raw=TRUE)
+#'           h_hp=h_hp, diag=dm, return_raw=TRUE, verbose=FALSE)
 #' compare_two_results(est5, est6) ## Should be almost all 0
 #'
 #' elts_gauss_p <- get_elts(h_hp, x, setting="gaussian", domain=domain,
@@ -2449,7 +2462,7 @@ make_folds <- function(nsamp, nfold, cv_fold_seed){
 #' ## Profiled estimates, elts provided; equivalent to est5~6
 #' est7 <- estimate(x, "gaussian", domain=domain, elts=elts_gauss_p, centered=FALSE,
 #'           lambda_ratio=Inf, symmetric="or", lambda1s=lambda1s,
-#'           diagonal_multiplier=NULL, return_raw=TRUE)
+#'           diagonal_multiplier=NULL, return_raw=TRUE, verbose=FALSE)
 #' compare_two_results(est5, est7) ## Should be almost all 0
 #'
 #'
@@ -2458,13 +2471,13 @@ make_folds <- function(nsamp, nfold, cv_fold_seed){
 #' est8 <- estimate(x, "gaussian", domain=domain, elts=NULL, centered=FALSE,
 #'           lambda_ratio=2, symmetric="and", lambda_length=100,
 #'           mode="min_pow", param1=1, param2=3, diag=dm, return_raw=TRUE,
-#'           BIC_refit=FALSE, cv_fold=5, cv_fold_seed=2)
+#'           BIC_refit=FALSE, cv_fold=5, cv_fold_seed=2, verbose=FALSE)
 #'
 #' ## Non-centered estimates, no elts provided, h provided; equivalent to est5
 #' ## Using 5-fold cross validation and no BIC refit
 #' est9 <- estimate(x, "gaussian", domain=domain, elts=NULL, centered=FALSE,
-#'           lambda_ratio=2, symmetric="and", lambda_length=100, h_hp=h_hp,
-#'           diag=dm, return_raw=TRUE, BIC_refit=FALSE, cv_fold=5, cv_fold_seed=2)
+#'           lambda_ratio=2, symmetric="and", lambda_length=100, h_hp=h_hp, diag=dm, 
+#'           return_raw=TRUE, BIC_refit=FALSE, cv_fold=5, cv_fold_seed=2, verbose=FALSE)
 #' compare_two_results(est8, est9) ## Should be almost all 0
 #'
 #' elts_gauss_np <- get_elts(h_hp, x, setting="gaussian", domain=domain, centered=FALSE,
@@ -2473,7 +2486,7 @@ make_folds <- function(nsamp, nfold, cv_fold_seed){
 #' ## Using 5-fold cross validation and no BIC refit
 #' est10 <- estimate(x, "gaussian", domain, elts=elts_gauss_np, centered=FALSE,
 #'            lambda_ratio=2, symmetric="and", lambda_length=100, diag=NULL,
-#'            return_raw=TRUE, BIC_refit=FALSE, cv_fold=5, cv_fold_seed=2)
+#'            return_raw=TRUE, BIC_refit=FALSE, cv_fold=5, cv_fold_seed=2, verbose=FALSE)
 #' compare_two_results(est8, est10) ## Should be almost all 0
 #'
 #' @export
@@ -2670,7 +2683,7 @@ estimate <- function(x, setting, domain, elts=NULL, centered=TRUE, symmetric="sy
 #' @param res A list of results returned by \code{get_results()}.
 #' @param elts A list, elements necessary for calculations returned by \code{get_elts()}.
 #' @return A number, the loss of the refitted model.
-#' @details Currently the function only returns \code{Inf} when the maximum node degree is >= the sample size, which is a sufficient and necessary condition for inexistence of a unique solution with probability 1 if \code{symmetric != "symmetric"}. In practice it is also a sufficient and necessary condition for most cases and \code{symmetric == "symmetric"}.
+#' @details Currently the function only returns \code{Inf} when the maximum node degree is >= the sample size, which is a sufficient and necessary condition for nonexistence of a unique solution with probability 1 if \code{symmetric != "symmetric"}. In practice it is also a sufficient and necessary condition for most cases and \code{symmetric == "symmetric"}.
 #' @examples
 #' # Examples are shown for Gaussian truncated to R+^p only. For other distributions
 #' #   on other types of domains, please refer to \code{gen()} or \code{get_elts()},
@@ -2904,9 +2917,9 @@ eBIC <- function(res, elts, BIC_refit=TRUE, gammas=c(0,0.5,1)){
 #' @export
 calc_crit <- function(elts, res, penalty) {
   if (!elts$centered && elts$profiled)
-    stop("In calc_crit(): elts must not be profiled if noncentered.")
+    stop("In calc_crit(): elts must not be profiled if non-centered.")
   if (elts$centered != is.null(res$eta))
-    stop("elts and res must be both centered or both noncentered.")
+    stop("elts and res must be both centered or both non-centered.")
   if (elts$p != res$p)
     stop("elts$p and res$p must be equal.")
   if (penalty) {
@@ -3119,37 +3132,78 @@ mu_sigmasqhat <- function(x, mode, param1, param2, mu=NULL, sigmasq=NULL){
   return (c(k_eta[2]/k_eta[1], 1/k_eta[1]))
 }
 
-#' Asymptotic log of \code{h} and \code{hp} functions for large \code{x} for some modes.
+#' Asymptotic log of \code{h} and \code{hp} functions for large \code{x} for modes with an unbounded \code{h}.
 #'
-#' Asymptotic log of \code{h} and \code{hp} functions for large \code{x} for some modes.
+#' Asymptotic log of \code{h} and \code{hp} functions for large \code{x} for modes with an unbounded \code{h}.
 #'
-#' @param mode A string, the class of the \code{h} function.
+#' @param mode A string, the class of the \code{h} function. Must be one of \code{"asinh"}, \code{"cosh"}, \code{"exp"}, \code{"identity"}, \code{"log_pow"}, \code{"pow"}, \code{"sinh"}, \code{"softplus"}, and \code{"tanh"}.
 #' @param para A number, the first parameter to the \code{h} function.
-#' @return A list of two functions, \code{logh} and \code{loghp}.
+#' @examples 
+#' para <- 2.3
+#' x <- seq(from=0.1, to=150, by=0.1)
+#' for (mode in c("asinh", "cosh", "exp", "identity", "log_pow", "pow", "sinh", "softplus", "tanh")) {
+#'   print(mode)
+#'   hx_hpx <- get_h_hp(mode, para)(x)
+#'   print(c(max(abs(get_safe_log_h_hp(mode, para)$logh(x) - log(hx_hpx$hx))), 
+#'           max(abs(get_safe_log_h_hp(mode, para)$loghp(x) - log(hx_hpx$hpx)))))
+#' }
+#' @return A list of two vectorized functions, \code{logh} and \code{loghp}.
 #' @export
 get_safe_log_h_hp <- function(mode, para){
   # works for e.g. when para*a >= 100, except for log_pow and pow which are exact for all para and a
-  if (mode == "asinh") return (list(logh=function(a){log(log(para*a*2))},loghp=function(a){-log(a)}))
-  else if (mode == "cosh") return (list(logh=function(a){para*a-log(2)},loghp=function(a){log(para)+para*a-log(2)}))
-  else if (mode == "exp") {return (list(logh=function(a){para*a},loghp=function(a){log(para)+para*a}))}
-  else if (mode == "identity") {return (list(logh=function(a){log(a)},loghp=function(a){numeric(length(a))}))}
-  else if (mode == "log_pow") {return (list(logh=function(a){para*log(log(1+a))},loghp=function(a){log(para)+log(log(1+a))*(para-1)-log(1+a)}))}
-  else if (mode == "pow") {return (list(logh=function(a){para*log(a)},loghp=function(a){log(para)+log(a)*(para-1)}))}
-  else if (mode == "sinh") return (list(logh=function(a){para*a-log(2)},loghp=function(a){log(para)+para*a-log(2)}))
-  else if (mode == "softplus") return (list(logh=function(a){log(para*a-log(2))},loghp=function(a){log(para)}))
-  else if (mode == "tanh") {return (list(logh=function(a){rep(1,length(a))},loghp=function(a){numeric(length(a))}))}
-  else {warning("not supported"); return(list(logh=NULL, loghp=NULL))}
+  if (mode == "asinh") {
+    logh <- function(a){ifelse(a>1e+8, log(log(para*a)+log(2)), log(asinh(para*a)))}
+    loghp <- function(a){ifelse(a>1e+8, -log(a), log(para/sqrt((para*a)^2+1)))}
+  } else if (mode == "cosh") {
+    logh <- function(a){ifelse(a>100, para*a-log(2), log(cosh(para*a)-1))}
+    loghp <- function(a){ifelse(a>100, para*a+log(para/2), log(para)+log(sinh(para*a)))}
+  } else if (mode == "exp") {
+    logh <- function(a){ifelse(a>100, para*a, log(exp(para*a)-1))}
+    loghp <- function(a){log(para)+para*a}
+  } else if (mode == "identity") {
+    logh <- log; loghp <- function(a){0}
+  } else if (mode == "log_pow") {
+    logh <- function(a){para*log(log(1+a))}
+    loghp <- function(a){log(para)+log(log(1+a))*(para-1)-log(1+a)}
+  } else if (mode == "pow") {
+    logh <- function(a){para*log(a)}
+    loghp <- function(a){log(para)+log(a)*(para-1)}
+  } else if (mode == "sinh") {
+    logh <- function(a){ifelse(a>100, para*a-log(2), log(sinh(para*a)))}
+    loghp <- function(a){ifelse(a>100, para*a+log(para/2), log(para)+log(cosh(para*a)))}
+  } else if (mode == "softplus") {
+    logh <- function(a){ifelse(a>100, log(para*a-log(2)), log(log(1+exp(para*a)) - log(2)))}
+    loghp <- function(a){ifelse(a>100, log(para), log(para/(1+exp(-para*a))))}
+  } else if (mode == "tanh") {
+    logh <- function(a){ifelse(a>100, 0, log(tanh(para*a)))}
+    loghp <- function(a){ifelse(a>100, log(para)-2*(para*a-log(2)), log(para)-2*log(cosh(para*a)))}
+  } else {
+    warning("Mode not supported for get_safe_log_h_hp()."); return(list(logh=NULL, loghp=NULL))
+  }
+  return (list(logh=Vectorize(logh), loghp=Vectorize(loghp)))
 }
 
-#' The truncation point for \code{h}.
+#' The truncation point for \code{h} for \code{h} that is truncated (bounded but not naturally bounded).
 #'
-#' The truncation point for \code{h}.
+#' The truncation point for \code{h} for \code{h} that is truncated (bounded but not naturally bounded).
 #'
-#' @param mode A string, the class of the \code{h} function.
+#' @param mode A string, the class of the \code{h} function. Must be one of \code{"mcp"}, \code{"scad"}, \code{"min_asinh"}, \code{"min_cosh"}, \code{"min_exp"}, \code{"min_log_pow"}, \code{"min_pow"}, \code{"min_sinh"}, \code{"min_softplus"}, \code{"truncated_sin"}, and \code{"truncated_tan"}.
 #' @param param1 A number, the first parameter to the \code{h} function.
 #' @param param2 A number, the second parameter (may be optional depending on \code{mode}) to the \code{h} function.
-#'
-#' @return Returns the truncation point (the point where \code{h} becomes constant and \code{hp} becomes 0) for some selected modes.
+#' @examples
+#' param1 <- 1.3; param2 <- 2.3
+#' for (mode in c("mcp", "scad", "min_asinh", "min_cosh", "min_exp", "min_log_pow",
+#'     "min_pow", "min_sinh", "min_softplus", "truncated_tan")) {
+#'   # Valgrind complains about "truncated_sin" for unknown reason; omitted
+#'   print(mode)
+#'   trun <- get_trun(mode, param1, param2)
+#'   x <- trun + -3:3 / 1e5
+#'   hx_hpx <- get_h_hp(mode, param1, param2)(x)
+#'   print(round(x, 6))
+#'   print(paste("hx:", paste(hx_hpx$hx, collapse=" ")))
+#'   print(paste("hpx:", paste(hx_hpx$hpx, collapse=" ")))
+#' }
+#' @return Returns the truncation point (the point \code{x0} such that \code{h} becomes constant and \code{hp} becomes 0 for \code{x >= x0}) for some selected modes.
 #' @export
 get_trun <- function(mode, param1, param2){
   trun <- Inf
@@ -3166,9 +3220,9 @@ get_trun <- function(mode, param1, param2){
   return (trun)
 }
 
-#' Asymptotic variance (times \code{n}) of the estimator for \code{mu} or \code{sigmasq} for the univariate truncated normal assuming the other parameter is known.
+#' Asymptotic variance (times \code{n}) of the estimator for \code{mu} or \code{sigmasq} for the univariate normal on a general domain assuming the other parameter is known.
 #'
-#' Asymptotic variance (times \code{n}) of the estimator for \code{mu} or \code{sigmasq} for the univariate truncated normal assuming the other parameter is known.
+#' Asymptotic variance (times \code{n}) of the estimator for \code{mu} or \code{sigmasq} for the univariate normal on a general domain assuming the other parameter is known.
 #'
 #' @param mu A number, the true \code{mu} parameter.
 #' @param sigmasq A number, the true \code{sigmasq} parameter.
@@ -3176,6 +3230,8 @@ get_trun <- function(mode, param1, param2){
 #' @param param1 A number, the first parameter to the \code{h} function.
 #' @param param2 A number, the second parameter (may be optional depending on \code{mode}) to the \code{h} function.
 #' @param est_mu A boolean. If \code{TRUE}, returns the asymptotic variance of muhat assuming sigmasq is known; if \code{FALSE}, returns the asymptotic variance of sigmasqhat assuming mu is known.
+#' @param domain A list returned from \code{make_domain()} that represents the domain.
+#' @param tol A positive number, tolerance for numerical integration. Defaults to \code{1e-10}.
 #' @return A number, the asymptotic variance.
 #' @details The estimates may be off from the empirical variance, or may even be \code{Inf} or \code{NaN} if \code{"mode"} is one of \code{"cosh"}, \code{"exp"}, and \code{"sinh")} as the functions grow too fast.
 #' If \code{est_mu == TRUE}, the function numerically calculates
@@ -3184,71 +3240,87 @@ get_trun <- function(mode, param1, param2){
 #' \deqn{E\left[\left(2\sigma^6h^2(X)+\sigma^8{h'}^2(X)\right)(X-\mu)^2\right]/E^2\left[h(X)(X-\mu)^2\right],}{E[(2\sigma^6h(X)^2+\sigma^8hp(X)^2)(X-\mu)^2]/E[h(X)(X-\mu)^2]^2,}
 #' where \eqn{E} is the expectation over the true distribution \eqn{TN(\mu,\sigma)} of \eqn{X}.
 #' @examples
-#' varhat(0, 1, "min_log_pow", 1, 1, TRUE)
-#' varhat(0.5, 4, "min_pow", 1, 1, TRUE)
+#' varhat(0, 1, "min_log_pow", 1, 1, TRUE, make_domain("R+", 1))
+#' varhat(0.5, 4, "min_pow", 1, 1, TRUE, make_domain("R+", 1))
 #' @export
-varhat <- function(mu, sigmasq, mode, param1, param2, est_mu){
+varhat <- function(mu, sigmasq, mode, param1, param2, est_mu, domain, tol=1e-10){
   if (!requireNamespace("cubature", quietly = TRUE))
     stop("Please install package \"cubature\".")
+  if (domain$p != 1) stop("Only 1-d domains are allowed.")
+  if (domain$type == "R") {
+    domain <- make_domain("uniform", p=1, lefts=0, rights=1)
+    domain$lefts <- -Inf; domain$rights <- Inf; domain$left_inf <- domain$right_inf <- TRUE
+  } else if (domain$type == "R+") {
+    domain <- make_domain("uniform", p=1, lefts=1, rights=Inf); domain$lefts <- 0
+  } else if (domain$type != "uniform") stop("Only R, R+ and uniform domain types are supported.")
   sigma <- sqrt(sigmasq)
-  inte <- function(f,from=0,to=Inf){stats::integrate(f,lower=from,upper=to,rel.tol=1e-10)$value}
-  adaptinte <- function(f,from=0,to=Inf){cubature::adaptIntegrate(function(t){x<-t/(1-t);1/(1-t)^2*f(x)},lowerLimit=from/(from+1),upperLimit=ifelse(is.infinite(to),1,to/(to+1)),tol=1e-10)$integral}
-  all_inte <- function(f,from=0,to=Inf){tryCatch(inte(f,from=from,to=to), error=function(e){adaptinte(f,from,to)})}
+  inte <- function(f,from=0,to=Inf){stats::integrate(f,lower=from,upper=to,rel.tol=tol)$value}
+  adaptinte_pos <- function(f,from=0,to=Inf){cubature::adaptIntegrate(function(t){x<-t/(1-t);1/(1-t)^2*f(x)},lowerLimit=from/(from+1),upperLimit=ifelse(is.infinite(to),1,to/(to+1)),tol=tol)$integral}
+  adaptinte_neg <- function(f,from=-Inf,to=0){cubature::adaptIntegrate(function(t){x<-t/(t-1);-1/(1-t)^2*f(x)},lowerLimit=ifelse(is.infinite(from),1,from/(from-1)),upperLimit=to/(to-1),tol=tol)$integral}
+  adaptinte <- function(f,from=-Inf,to=Inf){
+    if (from == to && to - from < tol) return (0)
+    if (to <= 0) return (adaptinte_neg(f, from, to))
+    if (from >= 0) return (adaptinte_pos(f, from, to))
+    return (adaptinte_neg(f, from, 0) + adaptinte_pos(f, 0, to))
+  }
+  all_inte <- function(f, from=0, to=Inf){tryCatch(inte(f, from=from, to=to), error=function(e){adaptinte(f, from, to)})}
+  exp_over_D <- function(f, log, est_mu){#domain, trun, mu, sigma, log){
+    f <- Vectorize(f)
+    if (log) {
+      if (est_mu) fd <- function(x){exp(f(x) + stats::dnorm(x, mu, sigma, log=TRUE))}
+      else fd <- function(x){exp(f(x) + 2*log(abs(x-mu)) + stats::dnorm(x, mu, sigma, log=TRUE))}
+    } else {
+      if (est_mu) fd <- function(x){f(x) * stats::dnorm(x, mu, sigma)}
+      else fd <- function(x){f(x) * stats::dnorm(x, mu, sigma) * (x-mu)^2}
+    }
+    sum(sapply(1:length(domain$lefts),
+               function(i){l<-domain$lefts[i]; r<-domain$rights[i];
+               #if (is.infinite(l) && is.infinite(r)) {f(0)
+               #} else if (is.infinite(l)) {all_inte(fd, r-trun, r) + f(r-2*trun) * stats::pnorm(r-trun, mu, sigma)
+               #} else if (is.infinite(r)) {all_inte(fd, l, l+trun) + f(l+2*trun) * (1 - stats::pnorm(l+trun, mu, sigma))
+               #} else 
+               if ((r-l) > 2*trun) {all_inte(fd, l, l+trun) + all_inte(fd, r-trun, r) + 
+                   f((l+r)/2) * ifelse(est_mu, 
+                                       stats::pnorm(r-trun, mu, sigma) - stats::pnorm(l+trun, mu, sigma),
+                                       all_inte(function(x){stats::dnorm(x, mu, sigma) * (x-mu)^2}, l+trun, r-trun))
+               } else {all_inte(fd, l, r)}}))}
+  norm_const <- sum(sapply(1:length(domain$lefts), 
+                           function(i){stats::pnorm(domain$rights[i], mu, sigma) - stats::pnorm(domain$lefts[i], mu, sigma)}))
+  cutoff <- max(abs(stats::qnorm(1e-40 * norm_const)), 3)
+  right_limit <- max(abs(mu+cutoff*sigma), abs(mu-cutoff*sigma))
   h_hp <- get_h_hp(mode, param1, param2)
-  h <- function(x){h_hp(x)$hx}; hp <- function(x){h_hp(x)$hpx}
-  right_limit <- sqrt(-(log(1e-20)+log(sigma*sqrt(2*pi)))*sigma^2*2)+mu # such that dnorm(right_limit, mu, sigma) = 1e-20
-  if (!mode %in% c("asinh", "cosh", "exp", "identity", "log_pow", "pow", "sinh", "softplus", "tanh")) {
-    trun <- get_trun(mode, param1, param2)
-    if (est_mu) {
-      if (trun < right_limit) {
-        Es2h2xANDs4hp2x <- all_inte(function(x){(sigma^2*h(x)^2+sigma^4*hp(x)^2)*stats::dnorm(x,mu,sigma)},to=trun) + sigma^2*h(trun)^2*(1-stats::pnorm(trun,mu,sigma))
-        Eh <- all_inte(function(x){h(x)*stats::dnorm(x,mu,sigma)},to=trun) + h(trun)*(1-stats::pnorm(trun,mu,sigma))
-      } else {
-        Es2h2xANDs4hp2x <- all_inte(function(x){(sigma^2*h(x)^2+sigma^4*hp(x)^2)*stats::dnorm(x,mu,sigma)},to=right_limit)
-        Eh <- all_inte(function(x){h(x)*stats::dnorm(x,mu,sigma)},to=right_limit)
-      }
-      return (Es2h2xANDs4hp2x / Eh^2 * (1-stats::pnorm(0,mu,sigma)))
+  hd_hpd <- function(x) {h_of_dist(h_hp, matrix(x, ncol=1), domain)}
+  for (i in 1:length(domain$lefts)) {
+    if (domain$lefts[i] > right_limit || domain$rights[i] < -right_limit) {
+      domain$lefts[i] <- domain$rights[i] <- NA
     } else {
-      if (trun < right_limit) {
-        EXmu2_from_trun <- all_inte(function(x){exp(2*log(abs(x-mu))+stats::dnorm(x,mu,sigma,log=TRUE))},from=trun)
-        E2s6h2Xmu2ANDs8hp2Xmu2 <- all_inte(function(x){sigma^6*(2*h(x)^2+sigma^2*hp(x)^2)*(x-mu)^2*stats::dnorm(x,mu,sigma)},to=trun) + 2*sigma^6*h(trun)^2*EXmu2_from_trun
-        EhXmu2 <- all_inte(function(x){h(x)*(x-mu)^2*stats::dnorm(x,mu,sigma)},to=trun) + h(trun)*EXmu2_from_trun
-      } else {
-        E2s6h2Xmu2ANDs8hp2Xmu2 <- all_inte(function(x){sigma^6*(2*h(x)^2+sigma^2*hp(x)^2)*(x-mu)^2*stats::dnorm(x,mu,sigma)},to=right_limit)
-        EhXmu2 <- all_inte(function(x){h(x)*(x-mu)^2*stats::dnorm(x,mu,sigma)},to=right_limit)
-      }
-      return (E2s6h2Xmu2ANDs8hp2Xmu2/EhXmu2^2 * (1-stats::pnorm(0,mu,sigma)))
+      domain$rights[i] <- min(domain$rights[i], right_limit)
+      domain$lefts[i] <- max(domain$lefts[i], -right_limit)
     }
-  } else{
-    trun <- 100/param1
+  }
+  domain$lefts <- stats::na.omit(domain$lefts); domain$rights <- stats::na.omit(domain$rights)
+  unbounded <- mode %in% c("asinh", "cosh", "exp", "identity", "log_pow", "pow", "sinh", "softplus", "tanh")
+  if (unbounded) {
+    trun <- Inf
     log_h_hp <- get_safe_log_h_hp(mode, param1); logh <- log_h_hp$logh; loghp <- log_h_hp$loghp
+    log_hdhpd <- function(x) {h_of_dist(function(x){list(hx=logh(x), hpx=loghp(x))}, matrix(x, ncol=1), domain, log=TRUE)}
+    log_h <- function(x){log_hdhpd(x)$log_hdx}
+    log_h2 <- function(x){2*log_hdhpd(x)$log_hdx}
+    log_hp2 <- function(x){2*log_hdhpd(x)$log_hpdx} # $sign_hpdx does not matter due to the ^2
+    if (est_mu) 
+      return ((exp_over_D(log_h2, TRUE, TRUE) * sigmasq + exp_over_D(log_hp2, TRUE, TRUE) * sigmasq^2) / exp_over_D(log_h, TRUE, TRUE)^2 * norm_const)
+    else
+      return (sigmasq^3 * (2 * exp_over_D(log_h2, TRUE, FALSE) + sigmasq * exp_over_D(log_hp2, TRUE, FALSE)) / exp_over_D(log_h, TRUE, FALSE)^2 * norm_const)
+  } else {
+    trun <- get_trun(mode, param1, param2)
+    hdhpd <- function(x){h_of_dist(h_hp, matrix(x, ncol=1), domain)}
     if (est_mu) {
-      if (trun < right_limit) {
-        Es2h2xANDs4hp2x_to100 <- all_inte(function(x){(sigma^2*h(x)^2+sigma^4*hp(x)^2)*stats::dnorm(x,mu,sigma)},to=trun)
-        Eh2_from100 <- all_inte(function(x){exp(2*logh(x)+stats::dnorm(x,mu,sigma,log=TRUE))},from=trun,to=right_limit)
-        Ehp2_from100 <- all_inte(function(x){exp(2*loghp(x)+stats::dnorm(x,mu,sigma,log=TRUE))},from=trun,to=right_limit)
-        Eh_to100 <- all_inte(function(x){h(x)*stats::dnorm(x,mu,sigma)},to=trun)
-        Eh_from100 <- all_inte(function(x){exp(logh(x)+stats::dnorm(x,mu,sigma,log=TRUE))},from=trun,to=right_limit)
-      } else {
-        Es2h2xANDs4hp2x_to100 <- all_inte(function(x){(sigma^2*h(x)^2+sigma^4*hp(x)^2)*stats::dnorm(x,mu,sigma)},to=right_limit)
-        Eh_to100 <- all_inte(function(x){h(x)*stats::dnorm(x,mu,sigma)},to=right_limit)
-        Eh2_from100 <- Ehp2_from100 <- Eh_from100 <- 0
-      }
-      return ((Es2h2xANDs4hp2x_to100+sigma^2*Eh2_from100+sigma^4*Ehp2_from100) / (Eh_from100+Eh_to100)^2 * (1-stats::pnorm(0,mu,sigma)))
+      numer <- function(x){hdhpdx<-hdhpd(x); sigmasq*hdhpdx$hdx^2+sigmasq^2*hdhpdx$hpdx^2}
     } else {
-      if (trun < right_limit) {
-        E2s6h2Xmu2ANDs8hp2Xmu2_to100 <- all_inte(function(x){sigma^6*(2*h(x)^2+sigma^2*hp(x)^2)*(x-mu)^2*stats::dnorm(x,mu,sigma)},to=trun)
-        Eh2Xmu2_from100 <- all_inte(function(x){exp(2*logh(x)+2*log(x-mu)+stats::dnorm(x,mu,sigma,log=TRUE))},from=trun,to=right_limit)
-        EhpXmu2_from100 <- all_inte(function(x){exp(2*loghp(x)+2*log(x-mu)+stats::dnorm(x,mu,sigma,log=TRUE))},from=trun,to=right_limit)
-        EhXmu2_to100 <- all_inte(function(x){h(x)*(x-mu)^2*stats::dnorm(x,mu,sigma)},to=trun)
-        EhXmu2_from100 <- all_inte(function(x){exp(logh(x)+2*log(x-mu)+stats::dnorm(x,mu,sigma,log=TRUE))},from=trun,to=right_limit)
-      } else {
-        E2s6h2Xmu2ANDs8hp2Xmu2_to100 <- all_inte(function(x){sigma^6*(2*h(x)^2+sigma^2*hp(x)^2)*(x-mu)^2*stats::dnorm(x,mu,sigma)},to=right_limit)
-        EhXmu2_to100 <- all_inte(function(x){h(x)*(x-mu)^2*stats::dnorm(x,mu,sigma)},to=right_limit)
-        Eh2Xmu2_from100 <- EhpXmu2_from100 <- EhXmu2_from100 <- 0
-      }
-      return ((E2s6h2Xmu2ANDs8hp2Xmu2_to100+2*sigma^6*Eh2Xmu2_from100+sigma^8*EhpXmu2_from100)/(EhXmu2_to100+EhXmu2_from100)^2 * (1-stats::pnorm(0,mu,sigma)))
+      numer <- function(x){hdhpdx<-hdhpd(x); sigmasq^3*(2*hdhpdx$hdx^2+sigmasq*hdhpdx$hpdx^2)}
     }
+    denom <- function(x){hdhpd(x)$hdx}
+    return (exp_over_D(numer, FALSE, est_mu) / exp_over_D(denom, FALSE, est_mu)^2 * norm_const)
   }
 }
 
