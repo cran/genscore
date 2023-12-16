@@ -1,6 +1,6 @@
 ## Package:
 #library(knitr); library(rmarkdown); library(devtools); library(roxygen2)
-#tools::package_native_routine_registration_skeleton(".") // Copy as src/genscore_init.c and manually add dist, rab_arms
+#tools::package_native_routine_registration_skeleton(".") # Copy as src/genscore_init.c and manually add dist, rab_arms
 #document(); build(); install(); devtools::check()
 #source("vignettes/precompile.R")
 #check_win_devel(); check_win_release(); #check_rhub()
@@ -13,6 +13,7 @@
 #rhub::check(platform="fedora-gcc-devel")
 #rhub::check(platform="ubuntu-gcc-devel")
 #rhub::check(platform="ubuntu-gcc-release")
+#devtools::submit_cran()
 
 
 #' Finds the distance of each element in a matrix x to the its boundary of the domain while fixing the others in the same row (dist(x, domain)), and calculates element-wise h(dist(x, domain)) and h\'(dist(x, domain)) (w.r.t. each element in x).

@@ -130,7 +130,7 @@ void shunting_yard(int *num_eqs, const char **infix_pt, char **postfix_pt, int *
 				for (int i = 0; i < pos; i++)
 					Rprintf("%c", infix[i]);
 				Rprintf("'.\n");
-				error("Please check your input.\n", pos + 1);
+				error("Please check your input at position %d.\n", pos + 1);
 			}
 			pos++;
 			prev_is = 3;

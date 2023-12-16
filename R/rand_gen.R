@@ -227,7 +227,7 @@ random_init_simplex <- function(p, rdist=stats::rnorm, tol=1e-10, maxtimes=100) 
 #'    \code{[-0.01,0.01]/abs(eq$power_numers[i])}.
 #' Then recalculate the new \code{quota} which subtracts the exp() terms from \code{eq$const}, and this time divided by the number of remaining components.
 #' If \code{quota} becomes negative and \code{eq$larger == FALSE}, each component, after \code{frac_pow()} is assumed to give a negative number.
-#' This is not possible if the term has the form x^{even_number/even_number}, or if the term is not log() in the case where \code{eq$nonnegative == TRUE || eq$abs == TRUE}.
+#' This is not possible if the term has the form x^\{even_number/even_number\}, or if the term is not log() in the case where \code{eq$nonnegative == TRUE || eq$abs == TRUE}.
 #' Change quota to a positive smaller in absolute value for these bad terms and generate.
 #' Finally, recalculate quota as before and generate the rest of the "good" components.
 #' 
